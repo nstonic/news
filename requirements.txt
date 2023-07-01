@@ -1,0 +1,9 @@
+aiohttp
+cchardet
+aiodns
+beautifulsoup4
+requests
+pytest
+pymorphy2
+pymorphy2-dicts
+DAWG-Python
