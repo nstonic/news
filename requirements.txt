@@ -8,4 +8,4 @@ pymorphy2
 pymorphy2-dicts
 DAWG-Python
 anyio==3.7.0
-aiofiles==23.1.0 
+aiofiles==23.1.0
