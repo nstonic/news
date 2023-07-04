@@ -10,24 +10,22 @@ async def handle(request):
     if urls:
         url_list = urls.split(',')
         if len(url_list) > 10:
-            return web.json_response({
-                'error': 'Too many urls in request, should be 10 or less'
-            },
+            return web.json_response(
+                {'error': 'Too many urls in request, should be 10 or less'},
                 status=400
             )
-        rater = JaundiceRater('charged_dict')
+        rater = JaundiceRater()
         async with anyio.create_task_group() as tg:
             tg.start_soon(rater.rate, url_list)
         return web.json_response(rater.results)
     else:
-        return web.json_response({
-            'error': 'URL list is empty'
-        })
+        return web.json_response(
+            {'error': 'URL list is empty'}
+        )
 
 
 app = web.Application()
 app.add_routes([web.get('/', handle)])
-
 
 if __name__ == '__main__':
     web.run_app(app, host='127.0.0.1')
