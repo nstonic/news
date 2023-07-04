@@ -3,11 +3,12 @@ import os
 from enum import Enum
 from typing import List
 
+import aiofiles
 import aiohttp
 
 import anyio
 import pymorphy2
-from aiohttp import ClientResponseError
+from aiohttp import ClientResponseError, InvalidURL, ClientConnectorError
 from async_timeout import timeout
 
 from adapters import ArticleNotFound
@@ -17,15 +18,18 @@ from text_tools import split_by_words, calculate_jaundice_rate
 
 class JaundiceRater:
 
-    def __init__(self, dict_path: str):
-        self.results = []
-        self.charged_words = []
+    def __init__(self, dict_path: str = 'charged_dict'):
+        self.results = list()
+        self.charged_words = list()
         self.collect_charged_words(dict_path)
 
     async def rate(self, urls: List[str]):
         async with anyio.create_task_group() as tg:
             for url in urls:
                 tg.start_soon(self.process_article, url)
+
+    def clean_results(self):
+        self.results = list()
 
     async def get_article_text(self, url: str):
         async with aiohttp.ClientSession() as self.session:
@@ -53,11 +57,9 @@ class JaundiceRater:
         try:
             async with timeout(3):
                 text = await self.get_article_text(url)
-            if not text:
-                raise ArticleNotFound
             async with timeout(3):
-                words = split_by_words(pymorphy2.MorphAnalyzer(), text)
-        except ClientResponseError:
+                words = await split_by_words(pymorphy2.MorphAnalyzer(), text)
+        except (ClientResponseError, ClientConnectorError, InvalidURL):
             result.update({
                 'status': ProcessingStatus.FETCH_ERROR.value
             })
@@ -84,3 +86,31 @@ class ProcessingStatus(Enum):
     FETCH_ERROR = 'FETCH_ERROR'
     PARSING_ERROR = 'PARSING_ERROR'
     TIMEOUT = 'TIMEOUT'
+
+
+async def get_long_article(*args):
+    async with aiofiles.open('long.txt', mode='r', encoding='utf8') as f:
+        return await f.read()
+
+
+def test_process_article():
+    rater = JaundiceRater()
+    anyio.run(rater.rate, ['https://inosmi.ru/economic/20190629/245384784.html'])
+    assert rater.results[0]['status'] == ProcessingStatus.OK.value
+
+    rater.clean_results()
+    anyio.run(rater.rate, ['https://inosmiI.ru/20190629/2453484784.html'])
+    assert rater.results[0]['status'] == ProcessingStatus.FETCH_ERROR.value
+
+    rater.clean_results()
+    anyio.run(rater.rate, ['https://russian.rt.com/world/news/1170140-kitai-vizit-borrel'])
+    assert rater.results[0]['status'] == ProcessingStatus.PARSING_ERROR.value
+
+    rater.clean_results()
+    rater.get_article_text = get_long_article
+    anyio.run(rater.rate, ['https://ya.ru'])
+    assert rater.results[0]['status'] == ProcessingStatus.TIMEOUT.value
+
+
+if __name__ == '__main__':
+    test_process_article()
