@@ -1,8 +1,6 @@
 import asyncio
-import logging
 import os
 from enum import Enum
-from pprint import pprint
 from typing import List
 
 import aiohttp
@@ -48,8 +46,9 @@ class JaundiceRater:
 
     async def process_article(self, url: str):
         result = {
-            'Желтушность': None,
-            'Количество слов': None
+            'url': url,
+            'score': None,
+            'words': None
         }
         try:
             async with timeout(3):
@@ -57,27 +56,27 @@ class JaundiceRater:
             if not text:
                 raise ArticleNotFound
             async with timeout(3):
-                words = await split_by_words(pymorphy2.MorphAnalyzer(), text)
+                words = split_by_words(pymorphy2.MorphAnalyzer(), text)
         except ClientResponseError:
             result.update({
-                'Статус': ProcessingStatus.FETCH_ERROR
+                'status': ProcessingStatus.FETCH_ERROR.value
             })
         except asyncio.exceptions.TimeoutError:
             result.update({
-                'Статус': ProcessingStatus.TIMEOUT
+                'status': ProcessingStatus.TIMEOUT.value
             })
         except ArticleNotFound:
             result.update({
-                'Статус': ProcessingStatus.PARSING_ERROR
+                'status': ProcessingStatus.PARSING_ERROR.value
             })
         else:
             rate = calculate_jaundice_rate(words, self.charged_words)
             result.update({
-                'Статус': ProcessingStatus.OK,
-                'Желтушность': rate,
-                'Количество слов': len(words)
+                'status': ProcessingStatus.OK.value,
+                'score': rate,
+                'words': len(words)
             })
-        self.results.append({url: result})
+        self.results.append(result)
 
 
 class ProcessingStatus(Enum):
@@ -85,24 +84,3 @@ class ProcessingStatus(Enum):
     FETCH_ERROR = 'FETCH_ERROR'
     PARSING_ERROR = 'PARSING_ERROR'
     TIMEOUT = 'TIMEOUT'
-
-    def __str__(self):
-        return str(self.value)
-
-
-def main():
-    urls = [
-        'https://inosmi.ru/economic/20190629/245384784.html',
-        'https://inosmi.ru/politic/20190629/245379332.html',
-        'https://inosmi.ru/20200119/246647767.html',
-        'https://inosmi.ru/20230701/fobii-264001674.html',
-        'https://inosmi.ru/20230701/britaniya-2640104.html'
-    ]
-    # logging.basicConfig(level=logging.INFO)
-    rater = JaundiceRater('charged_dict')
-    anyio.run(rater.rate, urls)
-    pprint(rater.results)
-
-
-if __name__ == '__main__':
-    main()

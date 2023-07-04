@@ -1,13 +1,12 @@
-import asyncio
 import logging
 import string
 import time
 
 
 def timer(func):
-    async def wrapper(*args, **kwargs):
+    def wrapper(*args, **kwargs):
         started_at = time.monotonic()
-        result = await func(*args, **kwargs)
+        result = func(*args, **kwargs)
         finished_at = time.monotonic()
         logging.info(f'Анализ закончен за {finished_at - started_at} сек.')
         return result
@@ -23,7 +22,7 @@ def _clean_word(word):
 
 
 @timer
-async def split_by_words(morph, text):
+def split_by_words(morph, text):
     """Учитывает знаки пунктуации, регистр и словоформы, выкидывает предлоги."""
     words = []
     for word in text.split():
@@ -31,7 +30,6 @@ async def split_by_words(morph, text):
         normalized_word = morph.parse(cleaned_word)[0].normal_form
         if len(normalized_word) > 2 or normalized_word == 'не':
             words.append(normalized_word)
-        await asyncio.sleep(0)
     return words
 
 
