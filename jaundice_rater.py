@@ -17,11 +17,27 @@ from text_tools import split_by_words, calculate_jaundice_rate
 
 
 class JaundiceRater:
+    morph = None
+    charged_words = list()
 
     def __init__(self, dict_path: str = 'charged_dict'):
-        self.results = list()
-        self.charged_words = list()
-        self.collect_charged_words(dict_path)
+        self._results = list()
+        if not self.charged_words:
+            self.collect_charged_words(dict_path)
+        if not self.morph:
+            self.__class__.morph = pymorphy2.MorphAnalyzer()
+
+    @classmethod
+    def collect_charged_words(cls, dict_path: str):
+        for file in os.listdir(dict_path):
+            with open(os.path.join(dict_path, file), encoding='utf8') as f:
+                cls.charged_words.extend([
+                    line.strip() for line in f.readlines()
+                ])
+
+    @property
+    def results(self):
+        return self._results
 
     async def rate(self, urls: List[str]):
         async with anyio.create_task_group() as tg:
@@ -29,19 +45,12 @@ class JaundiceRater:
                 tg.start_soon(self.process_article, url)
 
     def clean_results(self):
-        self.results = list()
+        self._results = list()
 
     async def get_article_text(self, url: str):
         async with aiohttp.ClientSession() as self.session:
             html = await self.fetch(url)
         return sanitize(html)
-
-    def collect_charged_words(self, dict_path: str):
-        for file in os.listdir(dict_path):
-            with open(os.path.join(dict_path, file), encoding='utf8') as f:
-                self.charged_words.extend([
-                    line.strip() for line in f.readlines()
-                ])
 
     async def fetch(self, url):
         async with self.session.get(url) as response:
@@ -58,7 +67,7 @@ class JaundiceRater:
             async with timeout(3):
                 text = await self.get_article_text(url)
             async with timeout(3):
-                words = await split_by_words(pymorphy2.MorphAnalyzer(), text)
+                words = await split_by_words(self.morph, text)
         except (ClientResponseError, ClientConnectorError, InvalidURL):
             result.update({
                 'status': ProcessingStatus.FETCH_ERROR.value
@@ -78,7 +87,7 @@ class JaundiceRater:
                 'score': rate,
                 'words': len(words)
             })
-        self.results.append(result)
+        self._results.append(result)
 
 
 class ProcessingStatus(Enum):
